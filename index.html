@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamlet Checker</title>
+    
+    <!-- Основной локальный скрипт -->
+    <script src="html5-qrcode.min.js"></script>
+    <!-- Резервный источник (jsDelivr), если локальный файл не найден -->
+    <script>
+        if (typeof Html5Qrcode === 'undefined') {
+            document.write('<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"><\/script>');
+        }
+    </script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Times New Roman', Times, serif;
+        }
+
+        body {
+            background-color: #222224; /* Серый фон */
+            color: #e6e6e6;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 750px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        h1 {
+            font-size: 3.8rem;
+            font-weight: normal;
+            margin-bottom: 10px;
+            color: #ffffff;
+        }
+
+        p.subtitle {
+            font-size: 1.7rem;
+            color: #b0b0b0;
+        }
+
+        /* Окно камеры */
+        .scanner-wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 320px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #181818;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            border: 2px solid #444444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #reader {
+            width: 100%;
+        }
+
+        #reader video {
+            object-fit: cover !important;
+        }
+
+        /* Прицел сканера */
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 260px;
+            height: 260px;
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.45);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Ошибки камеры */
+        .camera-error {
+            padding: 25px;
+            text-align: center;
+            color: #ff5252;
+            font-size: 1.4rem;
+            line-height: 1.5;
+        }
+
+        /* Блок результатов */
+        #result-container {
+            display: none;
+            width: 100%;
+            background-color: #2c2c30;
+            padding: 40px 30px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+            border: 2px solid #444444;
+        }
+
+        .status-original {
+            color: #4caf50;
+            font-size: 3.2rem;
+            margin-bottom: 20px;
+        }
+
+        .status-fake {
+            color: #f44336;
+            font-size: 2.2rem;
+            line-height: 1.4;
+        }
+
+        .card-image {
+            max-width: 100%;
+            max-height: 480px;
+            border-radius: 10px;
+            margin: 20px auto;
+            border: 2px solid #555555;
+        }
+
+        .btn-restart {
+            margin-top: 25px;
+            padding: 16px 35px;
+            background-color: #e0e0e0;
+            color: #111111;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+
+        .btn-restart:hover {
+            background-color: #ffffff;
+        }
+
+        /* Правила гарантии */
+        .rules-container {
+            width: 100%;
+            margin-top: 40px;
+            background-color: #2a2a2d;
+            border-radius: 16px;
+            padding: 30px;
+            border: 1px solid #3a3a3e;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+
+        .rules-container h2 {
+            font-size: 2.2rem;
+            font-weight: normal;
+            margin-bottom: 20px;
+            color: #ffffff;
+            border-bottom: 1px solid #44444c;
+            padding-bottom: 10px;
+        }
+
+        .rules-list {
+            list-style: none;
+            counter-reset: rules-counter;
+        }
+
+        .rules-list li {
+            counter-increment: rules-counter;
+            font-size: 1.5rem;
+            line-height: 1.6;
+            color: #d0d0d0;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .rules-list li::before {
+            content: counter(rules-counter) ".";
+            font-size: 1.6rem;
+            font-weight: bold;
+            color: #ffffff;
+            margin-right: 15px;
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 2.8rem; }
+            p.subtitle { font-size: 1.3rem; }
+            .status-original { font-size: 2.4rem; }
+            .status-fake { font-size: 1.7rem; }
+            .rules-container h2 { font-size: 1.8rem; }
+            .rules-list li { font-size: 1.2rem; }
+            .scan-overlay { width: 200px; height: 200px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Gamlet Checker</h1>
+            <p class="subtitle">Проверьте вашу карточку Gamlet Original</p>
+        </header>
+
+        <!-- Камера -->
+        <div class="scanner-wrapper" id="scanner-wrapper">
+            <div id="reader"></div>
+            <div class="scan-overlay" id="scan-overlay"></div>
+        </div>
+
+        <!-- Результат -->
+        <div id="result-container">
+            <div id="status-text"></div>
+            <img id="card-img" class="card-image" src="" alt="Карточка Gamlet" style="display: none;">
+            <button class="btn-restart" onclick="resetScanner()">Сканировать еще раз</button>
+        </div>
+
+        <!-- Правила гарантии -->
+        <div class="rules-container">
+            <h2>Правила гарантии</h2>
+            <ol class="rules-list">
+                <li>Чтобы сканировался Data Matrix код.</li>
+                <li>Чтобы был виден номер карточки.</li>
+                <li>Чтобы от карточки осталось больше 50%.</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        const validCodes = new Set([
+            "xT8k", "Mp2V", "bL9w", "J4zG", "qR7c", 
+            "vN1m", "H6fX", "sY3d", "K5tP", "W2bP", 
+            "Z9rK", "f4Mw", "nQ7v", "8YkS", "1MhD", 
+            "6cxP", "2xRw", "L9qk", "7P3X", "m9v2", 
+            "fRTb", "N5wL", "q8zA", "5bZk", "C7vN", 
+            "u9Wx", "h2Ym", "V4kP", "tR8s", "g1jQ"
+        ]);
+
+        let html5QrCode;
+
+        function startCamera() {
+            if (typeof Html5Qrcode === 'undefined') {
+                showError("Библиотека сканера не загружена.<br>Проверьте интернет или файл html5-qrcode.min.js");
+                return;
+            }
+
+            html5QrCode = new Html5Qrcode("reader");
+
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 280, height: 280 },
+                formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ]
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                onScanSuccess
+            ).catch(err => {
+                console.error(err);
+                showError("Ошибка доступа к камере.<br>Убедитесь, что вы открыли сайт по HTTPS или на localhost, и разрешили доступ к камере.");
+            });
+        }
+
+        function showError(msg) {
+            document.getElementById('scan-overlay').style.display = 'none';
+            document.getElementById('reader').innerHTML = `<div class="camera-error">${msg}</div>`;
+        }
+
+        function onScanSuccess(decodedText) {
+            html5QrCode.stop().then(() => {
+                document.getElementById('scanner-wrapper').style.display = 'none';
+
+                const resultContainer = document.getElementById('result-container');
+                const statusText = document.getElementById('status-text');
+                const cardImg = document.getElementById('card-img');
+
+                resultContainer.style.display = 'block';
+
+                const cleanCode = decodedText.trim();
+
+                if (validCodes.has(cleanCode)) {
+                    statusText.className = "status-original";
+                    statusText.innerHTML = "Оригинал";
+                    
+                    cardImg.src = cleanCode + ".png";
+                    cardImg.style.display = "block";
+                } else {
+                    statusText.className = "status-fake";
+                    statusText.innerHTML = "Не распознан<br><span style='font-size: 1.4rem; color: #aaaaaa;'>Возможно, ваша карточка не настоящая</span>";
+                    cardImg.style.display = "none";
+                }
+            });
+        }
+
+        function resetScanner() {
+            document.getElementById('result-container').style.display = 'none';
+            document.getElementById('scanner-wrapper').style.display = 'flex';
+            document.getElementById('scan-overlay').style.display = 'block';
+            document.getElementById('reader').innerHTML = '';
+            startCamera();
+        }
+
+        window.onload = startCamera;
+    </script>
+</body>
+</html>
