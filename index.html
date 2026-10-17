@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gamlet Checker</title>
     
+    <!-- Иконка сайта (Favicon) -->
+    <link rel="icon" type="image/jpeg" href="photo_2026-09-24_19-14-53.jpg">
+    <link rel="apple-touch-icon" href="photo_2026-09-24_19-14-53.jpg">
+
     <!-- Основной локальный скрипт -->
     <script src="html5-qrcode.min.js"></script>
     <!-- Резервный источник (jsDelivr), если локальный файл не найден -->
@@ -61,7 +65,7 @@
         .scanner-wrapper {
             position: relative;
             width: 100%;
-            min-height: 320px;
+            min-height: 350px;
             border-radius: 16px;
             overflow: hidden;
             background: #181818;
@@ -97,11 +101,23 @@
 
         /* Ошибки камеры */
         .camera-error {
-            padding: 25px;
+            padding: 30px 20px;
             text-align: center;
             color: #ff5252;
             font-size: 1.4rem;
-            line-height: 1.5;
+            line-height: 1.6;
+        }
+
+        .btn-retry-camera {
+            margin-top: 15px;
+            padding: 12px 25px;
+            background-color: #ffffff;
+            color: #111111;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            font-family: 'Times New Roman', Times, serif;
         }
 
         /* Блок результатов */
@@ -251,10 +267,15 @@
 
         let html5QrCode;
 
-        function startCamera() {
+        async function startCamera() {
             if (typeof Html5Qrcode === 'undefined') {
-                showError("Библиотека сканера не загружена.<br>Проверьте интернет или файл html5-qrcode.min.js");
+                showError("Библиотека сканера не загружена.<br>Проверьте соединение с интернетом.");
                 return;
+            }
+
+            // Очищаем предыдущий экзмепляр
+            if (html5QrCode) {
+                try { await html5QrCode.clear(); } catch(e){}
             }
 
             html5QrCode = new Html5Qrcode("reader");
@@ -265,14 +286,23 @@
                 formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ]
             };
 
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                config, 
-                onScanSuccess
-            ).catch(err => {
-                console.error(err);
-                showError("Ошибка доступа к камере.<br>Убедитесь, что вы открыли сайт по HTTPS или на localhost, и разрешили доступ к камере.");
-            });
+            // Попытка 1: Задняя камера
+            try {
+                await html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+            } catch (err1) {
+                console.warn("Задняя камера недоступна, пробуем любую другую...", err1);
+                // Попытка 2: Любая доступная камера (веб-камера, фронтальная)
+                try {
+                    await html5QrCode.start({ facingMode: "user" }, config, onScanSuccess);
+                } catch (err2) {
+                    console.error("Не удалось запустить камеру:", err2);
+                    showError(
+                        "Нет доступа к камере.<br>" + 
+                        "Разрешите доступ к камере в настройках браузера и нажмите кнопку ниже." +
+                        "<br><button class='btn-retry-camera' onclick='resetScanner()'>Включить камеру</button>"
+                    );
+                }
+            }
         }
 
         function showError(msg) {
