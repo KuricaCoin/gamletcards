@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gamlet Checker</title>
-    
-    <!-- Иконка сайта (Favicon) -->
+
+    <!-- Иконка сайта -->
     <link rel="icon" type="image/jpeg" href="photo_2026-09-24_19-14-53.jpg">
     <link rel="apple-touch-icon" href="photo_2026-09-24_19-14-53.jpg">
 
-    <!-- Основной локальный скрипт -->
+    <!-- Локальный скрипт сканера -->
     <script src="html5-qrcode.min.js"></script>
-    <!-- Резервный источник (jsDelivr), если локальный файл не найден -->
+    <!-- Резервный источник, если локального файла нет -->
     <script>
         if (typeof Html5Qrcode === 'undefined') {
             document.write('<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"><\/script>');
@@ -27,7 +27,7 @@
         }
 
         body {
-            background-color: #222224; /* Серый фон */
+            background-color: #222224;
             color: #e6e6e6;
             display: flex;
             flex-direction: column;
@@ -61,7 +61,6 @@
             color: #b0b0b0;
         }
 
-        /* Окно камеры */
         .scanner-wrapper {
             position: relative;
             width: 100%;
@@ -84,7 +83,6 @@
             object-fit: cover !important;
         }
 
-        /* Прицел сканера */
         .scan-overlay {
             position: absolute;
             top: 50%;
@@ -99,28 +97,37 @@
             z-index: 5;
         }
 
-        /* Ошибки камеры */
-        .camera-error {
+        /* Экран запуска / ошибки */
+        .camera-message {
             padding: 30px 20px;
             text-align: center;
-            color: #ff5252;
             font-size: 1.4rem;
             line-height: 1.6;
+            color: #d0d0d0;
         }
 
-        .btn-retry-camera {
-            margin-top: 15px;
-            padding: 12px 25px;
+        .camera-message.error {
+            color: #ff6b6b;
+        }
+
+        .error-code {
+            display: block;
+            margin-top: 12px;
+            font-size: 1rem;
+            color: #777777;
+        }
+
+        .btn-camera {
+            margin-top: 20px;
+            padding: 16px 35px;
             background-color: #ffffff;
             color: #111111;
             border: none;
             border-radius: 8px;
-            font-size: 1.2rem;
+            font-size: 1.4rem;
             cursor: pointer;
-            font-family: 'Times New Roman', Times, serif;
         }
 
-        /* Блок результатов */
         #result-container {
             display: none;
             width: 100%;
@@ -161,7 +168,6 @@
             border-radius: 8px;
             font-size: 1.5rem;
             cursor: pointer;
-            transition: background 0.2s;
             width: 100%;
         }
 
@@ -169,7 +175,6 @@
             background-color: #ffffff;
         }
 
-        /* Правила гарантии */
         .rules-container {
             width: 100%;
             margin-top: 40px;
@@ -220,6 +225,7 @@
             .rules-container h2 { font-size: 1.8rem; }
             .rules-list li { font-size: 1.2rem; }
             .scan-overlay { width: 200px; height: 200px; }
+            .camera-message { font-size: 1.2rem; }
         }
     </style>
 </head>
@@ -231,20 +237,17 @@
             <p class="subtitle">Проверьте вашу карточку Gamlet Original</p>
         </header>
 
-        <!-- Камера -->
         <div class="scanner-wrapper" id="scanner-wrapper">
             <div id="reader"></div>
-            <div class="scan-overlay" id="scan-overlay"></div>
+            <div class="scan-overlay" id="scan-overlay" style="display: none;"></div>
         </div>
 
-        <!-- Результат -->
         <div id="result-container">
             <div id="status-text"></div>
             <img id="card-img" class="card-image" src="" alt="Карточка Gamlet" style="display: none;">
             <button class="btn-restart" onclick="resetScanner()">Сканировать еще раз</button>
         </div>
 
-        <!-- Правила гарантии -->
         <div class="rules-container">
             <h2>Правила гарантии</h2>
             <ol class="rules-list">
@@ -257,94 +260,163 @@
 
     <script>
         const validCodes = new Set([
-            "xT8k", "Mp2V", "bL9w", "J4zG", "qR7c", 
-            "vN1m", "H6fX", "sY3d", "K5tP", "W2bP", 
-            "Z9rK", "f4Mw", "nQ7v", "8YkS", "1MhD", 
-            "6cxP", "2xRw", "L9qk", "7P3X", "m9v2", 
-            "fRTb", "N5wL", "q8zA", "5bZk", "C7vN", 
+            "xT8k", "Mp2V", "bL9w", "J4zG", "qR7c",
+            "vN1m", "H6fX", "sY3d", "K5tP", "W2bP",
+            "Z9rK", "f4Mw", "nQ7v", "8YkS", "1MhD",
+            "6cxP", "2xRw", "L9qk", "7P3X", "m9v2",
+            "fRTb", "N5wL", "q8zA", "5bZk", "C7vN",
             "u9Wx", "h2Ym", "V4kP", "tR8s", "g1jQ"
         ]);
 
-        let html5QrCode;
+        let html5QrCode = null;
+        let isScanning = false;
 
-        async function startCamera() {
+        // Определяем встроенные браузеры приложений
+        function isInAppBrowser() {
+            return /Telegram|Instagram|FBAN|FBAV|VKClient|vkontakte|Line\/|WhatsApp/i.test(navigator.userAgent);
+        }
+
+        // Экран с кнопкой (нажатие нужно, чтобы браузер показал запрос разрешения)
+        function showStartScreen(text, isError, code) {
+            document.getElementById('scan-overlay').style.display = 'none';
+            document.getElementById('reader').innerHTML =
+                `<div class="camera-message ${isError ? 'error' : ''}">
+                    ${text}
+                    <br><button class="btn-camera" onclick="requestCamera()">Включить камеру</button>
+                    ${code ? `<span class="error-code">Код ошибки: ${code}</span>` : ''}
+                </div>`;
+        }
+
+        // Понятное объяснение ошибки
+        function explainError(err) {
+            const name = (err && err.name) ? err.name : String(err);
+
+            if (!window.isSecureContext) {
+                return ["Сайт открыт не по защищённому протоколу. Откройте адрес, который начинается с https://", name];
+            }
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                return ["Этот браузер не даёт доступ к камере.<br>Откройте сайт в Chrome или Safari.", name];
+            }
+            if (window.self !== window.top) {
+                return ["Сайт открыт внутри фрейма хостинга, и камера заблокирована.<br>Откройте прямую ссылку на сайт.", name];
+            }
+            if (isInAppBrowser()) {
+                return ["Похоже, сайт открыт внутри приложения (Telegram, VK, Instagram), а оно блокирует камеру.<br>Нажмите ⋮ или ... и выберите «Открыть в браузере».", name];
+            }
+            if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+                return ["Доступ к камере запрещён для этого сайта.<br>Нажмите на значок слева от адреса сайта → Разрешения → Камера → Разрешить, затем обновите страницу.", name];
+            }
+            if (name === "NotFoundError" || name === "OverconstrainedError") {
+                return ["Камера не найдена на этом устройстве.", name];
+            }
+            if (name === "NotReadableError" || name === "TrackStartError") {
+                return ["Камера занята другим приложением.<br>Закройте другие приложения или вкладки с камерой и попробуйте снова.", name];
+            }
+            return ["Не удалось включить камеру.", name];
+        }
+
+        // Нажатие кнопки: сначала явно просим разрешение у браузера
+        async function requestCamera() {
             if (typeof Html5Qrcode === 'undefined') {
-                showError("Библиотека сканера не загружена.<br>Проверьте соединение с интернетом.");
+                showStartScreen("Библиотека сканера не загрузилась.<br>Проверьте интернет и обновите страницу.", true, "LIB_NOT_LOADED");
                 return;
             }
 
-            // Очищаем предыдущий экзмепляр
-            if (html5QrCode) {
-                try { await html5QrCode.clear(); } catch(e){}
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: "environment" } }
+                });
+                // Разрешение получено, отпускаем камеру и запускаем сканер
+                stream.getTracks().forEach(t => t.stop());
+                await startScanner();
+            } catch (err) {
+                console.error(err);
+                const [text, code] = explainError(err);
+                showStartScreen(text, true, code);
             }
+        }
+
+        async function startScanner() {
+            document.getElementById('reader').innerHTML = '';
+            document.getElementById('scan-overlay').style.display = 'block';
 
             html5QrCode = new Html5Qrcode("reader");
 
-            const config = { 
-                fps: 15, 
+            const config = {
+                fps: 15,
                 qrbox: { width: 280, height: 280 },
                 formatsToSupport: [ Html5QrcodeSupportedFormats.DATA_MATRIX ]
             };
 
-            // Попытка 1: Задняя камера
             try {
                 await html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-            } catch (err1) {
-                console.warn("Задняя камера недоступна, пробуем любую другую...", err1);
-                // Попытка 2: Любая доступная камера (веб-камера, фронтальная)
-                try {
-                    await html5QrCode.start({ facingMode: "user" }, config, onScanSuccess);
-                } catch (err2) {
-                    console.error("Не удалось запустить камеру:", err2);
-                    showError(
-                        "Нет доступа к камере.<br>" + 
-                        "Разрешите доступ к камере в настройках браузера и нажмите кнопку ниже." +
-                        "<br><button class='btn-retry-camera' onclick='resetScanner()'>Включить камеру</button>"
-                    );
-                }
+                isScanning = true;
+            } catch (err) {
+                console.error(err);
+                const [text, code] = explainError(err);
+                showStartScreen(text, true, code);
             }
         }
 
-        function showError(msg) {
-            document.getElementById('scan-overlay').style.display = 'none';
-            document.getElementById('reader').innerHTML = `<div class="camera-error">${msg}</div>`;
-        }
+        async function onScanSuccess(decodedText) {
+            if (!isScanning) return;
+            isScanning = false;
 
-        function onScanSuccess(decodedText) {
-            html5QrCode.stop().then(() => {
-                document.getElementById('scanner-wrapper').style.display = 'none';
+            try { await html5QrCode.stop(); } catch (e) {}
 
-                const resultContainer = document.getElementById('result-container');
-                const statusText = document.getElementById('status-text');
-                const cardImg = document.getElementById('card-img');
+            document.getElementById('scanner-wrapper').style.display = 'none';
 
-                resultContainer.style.display = 'block';
+            const resultContainer = document.getElementById('result-container');
+            const statusText = document.getElementById('status-text');
+            const cardImg = document.getElementById('card-img');
 
-                const cleanCode = decodedText.trim();
+            resultContainer.style.display = 'block';
 
-                if (validCodes.has(cleanCode)) {
-                    statusText.className = "status-original";
-                    statusText.innerHTML = "Оригинал";
-                    
-                    cardImg.src = cleanCode + ".png";
-                    cardImg.style.display = "block";
-                } else {
-                    statusText.className = "status-fake";
-                    statusText.innerHTML = "Не распознан<br><span style='font-size: 1.4rem; color: #aaaaaa;'>Возможно, ваша карточка не настоящая</span>";
-                    cardImg.style.display = "none";
-                }
-            });
+            const cleanCode = decodedText.trim();
+
+            if (validCodes.has(cleanCode)) {
+                statusText.className = "status-original";
+                statusText.innerHTML = "Оригинал";
+                cardImg.src = cleanCode + ".png";
+                cardImg.style.display = "block";
+            } else {
+                statusText.className = "status-fake";
+                statusText.innerHTML = "Не распознан<br><span style='font-size: 1.4rem; color: #aaaaaa;'>Возможно, ваша карточка не настоящая</span>";
+                cardImg.style.display = "none";
+            }
         }
 
         function resetScanner() {
             document.getElementById('result-container').style.display = 'none';
             document.getElementById('scanner-wrapper').style.display = 'flex';
-            document.getElementById('scan-overlay').style.display = 'block';
-            document.getElementById('reader').innerHTML = '';
-            startCamera();
+            startScanner();
         }
 
-        window.onload = startCamera;
+        // При загрузке: если разрешение уже выдано, запускаем сразу, иначе показываем кнопку
+        window.onload = async () => {
+            if (isInAppBrowser()) {
+                showStartScreen("Похоже, сайт открыт внутри приложения (Telegram, VK, Instagram).<br>Если камера не включится, нажмите ⋮ или ... и выберите «Открыть в браузере».", false);
+                return;
+            }
+
+            try {
+                if (navigator.permissions && navigator.permissions.query) {
+                    const status = await navigator.permissions.query({ name: "camera" });
+                    if (status.state === "granted") {
+                        await startScanner();
+                        return;
+                    }
+                    if (status.state === "denied") {
+                        showStartScreen("Доступ к камере запрещён для этого сайта.<br>Нажмите на значок слева от адреса сайта → Разрешения → Камера → Разрешить, затем обновите страницу.", true, "PERMISSION_DENIED");
+                        return;
+                    }
+                }
+            } catch (e) {
+                // Safari и некоторые браузеры не поддерживают такую проверку, это нормально
+            }
+
+            showStartScreen("Нажмите кнопку и разрешите доступ к камере, чтобы отсканировать карточку.", false);
+        };
     </script>
 </body>
 </html>
